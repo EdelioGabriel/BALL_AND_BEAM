@@ -2,6 +2,7 @@
 #include <Wire.h>
 #include <VL53L0X.h>
 #include <ESP32Servo.h>
+#include "pinn_weights.h"
 
 // ====================================================================
 // PINOS
@@ -24,13 +25,15 @@ volatile float state[2]        = {0.0f, 0.0f};
 volatile float dist_anterior   = 0.0f;
 volatile float integrator      = 0.0f;
 bool           controladorAtivo = false;
+bool           usarPINN         = false;   // false = analítico | true = PINN
 
 const float          Ts            = 0.05f;
 const unsigned long  INTERVALO_US  = 50000UL;
 unsigned long        tempoAnteriorMicros = 0;
 
+// Ganhos do controlador analítico
 const float K[2] = { -2.58360110849265f, -0.80914289088315f };
-const float Ki   = -0.39478031237442f;
+const float Ki   =  -0.39478031237442f;
 
 char    serialBuffer[32];
 uint8_t bufferIndex = 0;
@@ -41,9 +44,64 @@ uint8_t bufferIndex = 0;
 bool modoColeta = false;
 
 // ====================================================================
+// INFERÊNCIA DA PINN
+// ====================================================================
+
+// Aplica tanh elemento a elemento em vetor
+void tanh_vec(float* v, int n) {
+  for (int i = 0; i < n; i++) {
+    v[i] = tanhf(v[i]);
+  }
+}
+
+// Multiplicação matriz-vetor: out = W * in + b
+// W: shape (n_out, n_in), armazenada em row-major
+void linear(const float* W, const float* b,
+            const float* in, float* out,
+            int n_in, int n_out) {
+  for (int i = 0; i < n_out; i++) {
+    float acc = b[i];
+    for (int j = 0; j < n_in; j++) {
+      acc += W[i * n_in + j] * in[j];
+    }
+    out[i] = acc;
+  }
+}
+
+// Inferência completa da PINN
+// Entrada: [posicao_cm, velocidade_cms, x_ref_cm, e_int]
+// Saída:   angulo em graus
+float pinnInference(float pos, float vel, float xref, float eint) {
+  float h0[PINN_N_HIDDEN];
+  float h1[PINN_N_HIDDEN];
+  float out[PINN_N_OUTPUTS];
+
+  float input[PINN_N_INPUTS] = {pos, vel, xref, eint};
+
+  // Camada 0: Linear + Tanh
+  linear(net_0_weight, net_0_bias, input, h0, PINN_N_INPUTS, PINN_N_HIDDEN);
+  tanh_vec(h0, PINN_N_HIDDEN);
+
+  // Camada 1: Linear + Tanh
+  linear(net_2_weight, net_2_bias, h0, h1, PINN_N_HIDDEN, PINN_N_HIDDEN);
+  tanh_vec(h1, PINN_N_HIDDEN);
+
+  // Camada de saída: Linear (sem ativação)
+  linear(net_4_weight, net_4_bias, h1, out, PINN_N_HIDDEN, PINN_N_OUTPUTS);
+
+  // Limita saída ao range físico
+  float theta = out[0];
+  if (theta >  30.0f) theta =  30.0f;
+  if (theta < -30.0f) theta = -30.0f;
+
+  return theta;
+}
+
+// ====================================================================
 // PROTÓTIPOS
 // ====================================================================
 float calcularControle();
+float calcularControlePINN();
 void  processarComando();
 
 // ====================================================================
@@ -69,7 +127,8 @@ void setup() {
   servoMotor.attach(PIN_SERVO, 500, 2400);
   servoMotor.write(120);
 
-  Serial.println("Sistema Pronto. [A] Ativar | [D] Desativar | [R] Reset");
+  Serial.println("Sistema Pronto.");
+  Serial.println("[A] Ativar | [D] Desativar | [R] Reset | [P] Alternar PINN/Analitico | [C] Coleta");
 }
 
 // ====================================================================
@@ -104,8 +163,8 @@ void loop() {
     dist_anterior = state[0];
 
     // --- Sinal de controle ---
-    float u          = calcularControle();
-    int   angulo_final = 120;
+    float u        = usarPINN ? calcularControlePINN() : calcularControle();
+    int angulo_final = 120;
 
     // --- Atuação ---
     if (controladorAtivo) {
@@ -120,25 +179,25 @@ void loop() {
 
     // --- Monitoramento serial ---
     if (modoColeta && controladorAtivo) {
-      // CSV: tempo_s, posicao_cm, velocidade_cms, u_K
-      float u_K = -K[0] * state[0] - K[1] * state[1];
-      Serial.printf("%.3f,%.4f,%.4f,%.4f\n",
+      Serial.printf("%.3f,%.4f,%.4f,%.4f,%.4f,%.4f\n",
         tempoAnteriorMicros / 1e6f,
         state[0],
         state[1],
-        u_K);
+        setpoint,
+        integrator,
+        u);
     } else {
-      // print de debug original
-      Serial.print("Ref:");   Serial.print(setpoint);
+      Serial.print(usarPINN ? "[PINN] " : "[ANAL] ");
+      Serial.print("Ref:");    Serial.print(setpoint);
       Serial.print(" | Pos:"); Serial.print(state[0]);
-      Serial.print(" | U:");   Serial.print(-K[0]*state[0] - K[1]*state[1] + Ki*integrator);
-      Serial.print(" | Ang:"); Serial.println(120 - (int)(-K[0]*state[0] - K[1]*state[1] + Ki*integrator));
+      Serial.print(" | U:");   Serial.print(u);
+      Serial.print(" | Ang:"); Serial.println(120 - (int)u);
     }
   }
 }
 
 // ====================================================================
-// FUNÇÕES DE SUPORTE
+// FUNÇÕES DE CONTROLE
 // ====================================================================
 
 float calcularControle() {
@@ -148,7 +207,7 @@ float calcularControle() {
     integrator += erro * Ts;
   }
 
-  float u_K = -K[0] * state[0] - K[1]* state[1];
+  float u_K   = -K[0] * state[0] - K[1] * state[1];
   float u_int = Ki * integrator;
   float u_out = u_K + u_int;
 
@@ -158,6 +217,19 @@ float calcularControle() {
   return u_out;
 }
 
+float calcularControlePINN() {
+  if (controladorAtivo) {
+    integrator += (setpoint - state[0]) * Ts;
+  }
+
+  float theta = pinnInference(state[0], state[1], setpoint, integrator);
+
+  return theta;
+}
+
+// ====================================================================
+// PROCESSAMENTO DE COMANDOS
+// ====================================================================
 void processarComando() {
   serialBuffer[bufferIndex] = '\0';
   char cmd = serialBuffer[0];
@@ -180,11 +252,17 @@ void processarComando() {
     } else if (cmd == 'C') {
       modoColeta = !modoColeta;
       Serial.println(modoColeta ? "\n>>> MODO COLETA ON" : "\n>>> MODO COLETA OFF");
+    } else if (cmd == 'P') {
+      usarPINN = !usarPINN;
+      integrator = 0.0f;   // reseta integrador ao trocar controlador
+      Serial.print("\n>>> CONTROLADOR: ");
+      Serial.println(usarPINN ? "PINN" : "ANALITICO");
     }
   } else {
     float val = atof(serialBuffer);
     if (val > 0.0f) {
       setpoint = val;
+      integrator = 0.0f;   // reseta integrador ao mudar setpoint
       Serial.print("\n>>> NOVA REF: ");
       Serial.println(setpoint);
     }
