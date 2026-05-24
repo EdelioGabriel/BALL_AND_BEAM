@@ -32,7 +32,7 @@ def objective(trial):
     n_hidden   = trial.suggest_categorical('n_hidden', [32, 64, 128])
     lr         = trial.suggest_float('lr',       1e-4, 1e-2, log=True)
     w_pde      = trial.suggest_float('w_pde',    0.1, 10.0)
-    w_track    = trial.suggest_float('w_track',  0.1, 10.0)
+    w_state    = trial.suggest_float('w_state',  0.1, 10.0)
     w_effort   = trial.suggest_float('w_effort', 0.1, 10.0)
     activation_name = trial.suggest_categorical('activation', ['Tanh', 'SiLU'])
 
@@ -61,7 +61,7 @@ def objective(trial):
 
         loss, _, _, _ = loss_function(
             xs, thetas, x_ref,
-            w_track  = w_track,
+            w_state  = w_state,
             w_effort = w_effort,
             w_pde    = w_pde,
         )
@@ -100,7 +100,7 @@ if __name__ == '__main__':
         load_if_exists = True
     )
 
-    study.optimize(objective, n_trials=100)
+    study.optimize(objective, n_trials=100, show_progress_bar=True)
 
     print("\n" + "=" * 50)
     print("Melhor trial:")

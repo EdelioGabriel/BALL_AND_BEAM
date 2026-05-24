@@ -113,7 +113,7 @@ def validate(model, config):
     print(f"  {'✓ Equivalência confirmada' if erro < 1e-5 else '✗ Erro alto'}")
 
 if __name__ == '__main__':
-    model_path  = RESULTS_DIR / 'pinn_ball_beam.pth'
+    model_path  = RESULTS_DIR / 'pinn_best.pth'
     header_path = EXPORT_DIR  / 'pinn_weights.h'
 
     print("=" * 50)
