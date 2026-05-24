@@ -21,3 +21,8 @@ pinn/models/
 
 # Jupyter (se usar no futuro)
 .ipynb_checkpoints/
+
+# HPC outputs
+*.out
+*.err
+*.log
