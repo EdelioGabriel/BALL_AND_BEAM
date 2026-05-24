@@ -26,11 +26,12 @@ import os
 import threading
 import time
 from datetime import datetime
+from pathlib import Path
 
 # ── Configuração padrão ───────────────────────────────────────────────
 DEFAULT_PORT     = "COM19"
 DEFAULT_BAUDRATE = 115200
-OUTPUT_DIR       = "data"
+OUTPUT_DIR = Path(__file__).parent.parent / "data"
 DT               = 0.05   # período de amostragem em segundos
 CSV_HEADER       = "tempo_s,posicao_cm,velocidade_cms,x_ref_cm,e_int,u_K\n"
 # ─────────────────────────────────────────────────────────────────────
