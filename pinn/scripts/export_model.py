@@ -13,7 +13,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from scripts.skeleton import PINN
 
 DEVICE      = torch.device('cpu')
-RESULTS_DIR = Path(__file__).parent.parent / 'tests' / 'results'
+RESULTS_DIR = Path(__file__).parent / 'results'
 EXPORT_DIR  = Path(__file__).parent.parent / 'export'
 EXPORT_DIR.mkdir(exist_ok=True)
 

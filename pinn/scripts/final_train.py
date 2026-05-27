@@ -37,7 +37,6 @@ study = optuna.load_study(
     storage    = f'sqlite:///{OPTUNA_DIR}/pinn_study.db'
 )
 
-
 BEST_PARAMS = study.best_params
 print(f"Loss: {study.best_value:.4e}")
 print(f"Params: {BEST_PARAMS}")

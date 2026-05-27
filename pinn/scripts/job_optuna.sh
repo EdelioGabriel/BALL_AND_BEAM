@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=pinn_optuna
+#SBATCH --job-name=ball_and_beam
 #SBATCH -n 1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
