@@ -7,11 +7,9 @@
 
 # Python
 pinn/.venv/
-pinn/scripts/optuna/
 __pycache__/
 *.pyc
 *.pyo
-*.pth
 .env
 
 # Modelos treinados (arquivos grandes)
