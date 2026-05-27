@@ -31,14 +31,30 @@ print(f'Usando: {DEVICE}')
 
 OPTUNA_DIR = Path(__file__).parent / 'optuna'
 
+'''
 study = optuna.load_study(
     study_name = 'pinn_ball_and_beam',
     storage    = f'sqlite:///{OPTUNA_DIR}/pinn_study.db'
 )
 
+
 BEST_PARAMS = study.best_params
 print(f"Loss: {study.best_value:.4e}")
 print(f"Params: {BEST_PARAMS}")
+'''
+
+BEST_PARAMS = {
+    'n_epochs':   474,
+    'batch_size': 128,
+    'n_steps':    84,
+    'n_layers':   2,
+    'n_hidden':   128,
+    'lr':         0.001279411173119678,
+    'w_pde':      0.1,
+    'w_state':    10.0,
+    'w_effort':   0.5,
+    'activation': 'SiLU',
+}
 
 ACTIVATION_MAP = {
     'Tanh': nn.Tanh,
