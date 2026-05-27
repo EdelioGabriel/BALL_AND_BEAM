@@ -20,7 +20,7 @@ from scripts.train import train, simulate, DT
 from scripts.skeleton import PINN
 
 DEVICE      = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-RESULTS_DIR = Path(__file__).parent.parent / 'tests' / 'results'
+RESULTS_DIR = Path(__file__).parent / 'results'
 RESULTS_DIR.mkdir(exist_ok=True)
 
 print(f'Usando: {DEVICE}')
@@ -31,7 +31,7 @@ print(f'Usando: {DEVICE}')
 
 OPTUNA_DIR = Path(__file__).parent / 'optuna'
 
-'''
+
 study = optuna.load_study(
     study_name = 'pinn_ball_and_beam',
     storage    = f'sqlite:///{OPTUNA_DIR}/pinn_study.db'
@@ -55,7 +55,7 @@ BEST_PARAMS = {
     'w_effort':   0.5,
     'activation': 'SiLU',
 }
-
+'''
 ACTIVATION_MAP = {
     'Tanh': nn.Tanh,
     'SiLU': nn.SiLU,

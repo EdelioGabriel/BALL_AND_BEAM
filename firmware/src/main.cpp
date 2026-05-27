@@ -54,6 +54,12 @@ void tanh_vec(float* v, int n) {
   }
 }
 
+void silu_vec(float* v, int n) {
+    for (int i = 0; i < n; i++) {
+        v[i] = v[i] / (1.0f + expf(-v[i]));
+    }
+}
+
 // Multiplicação matriz-vetor: out = W * in + b
 // W: shape (n_out, n_in), armazenada em row-major
 void linear(const float* W, const float* b,
@@ -80,19 +86,19 @@ float pinnInference(float pos, float vel, float xref, float eint) {
 
   // Camada 0: Linear + Tanh
   linear(net_0_weight, net_0_bias, input, h0, PINN_N_INPUTS, PINN_N_HIDDEN);
-  tanh_vec(h0, PINN_N_HIDDEN);
+  silu_vec(h0, PINN_N_HIDDEN);
 
   // Camada 1: Linear + Tanh
   linear(net_2_weight, net_2_bias, h0, h1, PINN_N_HIDDEN, PINN_N_HIDDEN);
-  tanh_vec(h1, PINN_N_HIDDEN);
+  silu_vec(h1, PINN_N_HIDDEN);
 
   // Camada de saída: Linear (sem ativação)
   linear(net_4_weight, net_4_bias, h1, out, PINN_N_HIDDEN, PINN_N_OUTPUTS);
 
   // Limita saída ao range físico
   float theta = out[0];
-  if (theta >  30.0f) theta =  30.0f;
-  if (theta < -30.0f) theta = -30.0f;
+  if (theta >  50.0f) theta =  50.0f;
+  if (theta < -50.0f) theta = -50.0f;
 
   return theta;
 }
@@ -224,7 +230,7 @@ float calcularControlePINN() {
 
   float theta = pinnInference(state[0], state[1], setpoint, integrator);
 
-  return theta;
+  return -theta;
 }
 
 // ====================================================================
