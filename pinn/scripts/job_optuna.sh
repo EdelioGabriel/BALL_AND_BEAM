@@ -42,7 +42,7 @@ echo "======================================"
 
 echo "Iniciando otimização de hiperparâmetros..."
 
-python final_train.py
+python export_model.py
 
 echo "======================================"
 echo "Finalizado em: $(date)"
