@@ -25,15 +25,15 @@ def objective(trial):
 
     # ── Hiperparâmetros a otimizar ───────────────────────────────────
     n_trials   = 100
-    n_epochs   = trial.suggest_int('n_epochs',   300, 1000)
-    batch_size = trial.suggest_categorical('batch_size', [64, 128, 256, 512])
+    n_epochs   = 500
+    batch_size = trial.suggest_int('batch_size', 100, 500)
     n_steps    = trial.suggest_int('n_steps',    60, 200)
-    n_layers   = trial.suggest_int('n_layers',   2, 6)
-    n_hidden   = trial.suggest_categorical('n_hidden', [32, 64, 128, 256, 512])
+    n_layers   = trial.suggest_int('n_layers',   2, 5)
+    n_hidden   = trial.suggest_categorical('n_hidden', [64, 128, 256, 512])
     lr         = trial.suggest_float('lr',       1e-4, 1e-2, log=True)
-    w_pde      = trial.suggest_float('w_pde',    1, 10.0)
-    w_state    = trial.suggest_float('w_state',  1, 10.0)
-    w_effort   = trial.suggest_float('w_effort', 1, 10.0)
+    w_pde      = trial.suggest_float('w_pde',    1, 5.0)
+    w_state    = trial.suggest_float('w_state',  5, 10.0)
+    w_effort   = trial.suggest_float('w_effort', 0.1, 0.5)
     activation_name = trial.suggest_categorical('activation', ['Tanh', 'SiLU'])
 
     activation_map = {
@@ -79,12 +79,12 @@ def objective(trial):
 # ====================================================================
 # EXECUÇÃO
 # ====================================================================
-
+print("Iniciando otimização de hiperparâmetros...")
 if __name__ == '__main__':
     pruner = optuna.pruners.MedianPruner(
         n_startup_trials = 20,   # mediana mais estável antes de podar
         n_warmup_steps   = 100,  # alinhado com n_epochs mínimo de 300
-        interval_steps   = 10,   # avalia a cada 10 épocas
+        interval_steps   = 5,   # avalia a cada 10 épocas
     )
     sampler = optuna.samplers.TPESampler(seed=367)
 
@@ -95,12 +95,12 @@ if __name__ == '__main__':
         direction      = 'minimize',
         sampler        = sampler,
         pruner         = pruner,
-        study_name     = 'pinn_ball_and_beam_amp',
+        study_name     = 'pinn_ball_and_beam_amp_4',
         storage        = f'sqlite:///{OPTUNA_DIR}/pinn_study.db',
         load_if_exists = True
     )
 
-    study.optimize(objective, n_trials=100, show_progress_bar=True)
+    study.optimize(objective, n_trials=50, show_progress_bar=True)
 
     print("\n" + "=" * 50)
     print("Melhor trial:")
