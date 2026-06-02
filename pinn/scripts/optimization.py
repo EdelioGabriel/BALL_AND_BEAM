@@ -26,10 +26,10 @@ def objective(trial):
 
     # ── Hiperparâmetros a otimizar ───────────────────────────────────
     n_epochs   = 500
-    batch_size = trial.suggest_int('batch_size', 100, 500)
+    batch_size = trial.suggest_int('batch_size', 100, 1000)
     n_steps    = trial.suggest_int('n_steps',    60, 200)
-    n_layers   = trial.suggest_int('n_layers',   2, 5)
-    n_hidden   = trial.suggest_categorical('n_hidden', [64, 128, 256, 512])
+    n_layers   = trial.suggest_int('n_layers',   1, 3)
+    n_hidden   = trial.suggest_categorical('n_hidden', [64, 128, 256])
     lr         = trial.suggest_float('lr',       1e-4, 1e-2, log=True)
     w_edo      = trial.suggest_float('w_edo',    1, 5.0)
     w_state    = trial.suggest_float('w_state',  5, 10.0)
@@ -95,12 +95,12 @@ if __name__ == '__main__':
         direction      = 'minimize',
         sampler        = sampler,
         pruner         = pruner,
-        study_name     = 'likepinn_ball_and_beam_amp_4',
+        study_name     = 'likepinn_ball_and_beam',
         storage        = f'sqlite:///{OPTUNA_DIR}/likepinn_study.db',
         load_if_exists = True
     )
 
-    study.optimize(objective, n_trials=50, show_progress_bar=True)
+    study.optimize(objective, n_trials=100, show_progress_bar=True)
 
     print("\n" + "=" * 50)
     print("Melhor trial:")

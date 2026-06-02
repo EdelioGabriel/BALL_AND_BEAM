@@ -17,7 +17,7 @@ import optuna
 sys.path.append(str(Path(__file__).parent.parent))
 
 from scripts.train import train, simulate, DT
-from scripts.skeleton import PINN
+from scripts.skeleton import LikePINN
 
 DEVICE      = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 RESULTS_DIR = Path(__file__).parent / 'results'
@@ -32,8 +32,8 @@ print(f'Usando: {DEVICE}')
 OPTUNA_DIR = Path(__file__).parent / 'optuna'
 
 study = optuna.load_study(
-    study_name = 'pinn_ball_and_beam_amp_4',
-    storage    = f'sqlite:///{OPTUNA_DIR}/pinn_study.db'
+    study_name = 'likepinn_ball_and_beam',
+    storage    = f'sqlite:///{OPTUNA_DIR}/likepinn_study.db'
 )
 
 BEST_PARAMS = study.best_params
@@ -48,7 +48,7 @@ BEST_PARAMS = {
     'n_layers':   2,
     'n_hidden':   128,
     'lr':         0.001279411173119678,
-    'w_pde':      0.0,
+    'w_edo':      0.0,
     'w_state':    10.0,
     'w_effort':   0.5,
     'activation': 'SiLU',
@@ -71,7 +71,7 @@ if __name__ == '__main__':
         print(f"  {k}: {v}")
     print("=" * 50)
 
-    model = PINN(
+    model = LikePINN(
         n_inputs   = 4,
         n_outputs  = 1,
         n_hidden   = BEST_PARAMS['n_hidden'],
@@ -89,14 +89,14 @@ if __name__ == '__main__':
         n_steps    = BEST_PARAMS['n_steps'],
         w_state    = BEST_PARAMS['w_state'],
         w_effort   = BEST_PARAMS['w_effort'],
-        w_pde      = 0.0,
+        w_edo      = BEST_PARAMS['w_edo'],
     )
 
     # ================================================================
     # SALVA MODELO
     # ================================================================
 
-    model_path = RESULTS_DIR / 'pinn_sem_phy.pth'
+    model_path = RESULTS_DIR / 'likepinn_best.pth'
     torch.save({
         'model_state_dict': model.state_dict(),
         'config': {
@@ -134,7 +134,7 @@ if __name__ == '__main__':
     axes[0].plot(history['loss'],        label='total')
     axes[0].plot(history['loss_state'],  label='rastreamento', linestyle='--')
     axes[0].plot(history['loss_effort'], label='esforço',      linestyle='-.')
-    axes[0].plot(history['loss_pde'],    label='física',       linestyle=':')
+    axes[0].plot(history['loss_edo'],    label='física',       linestyle=':')
     axes[0].set_yscale('log')
     axes[0].set_xlabel('Época')
     axes[0].set_ylabel('Loss (MSE)')
@@ -156,7 +156,7 @@ if __name__ == '__main__':
     axes[2].legend()
 
     plt.tight_layout()
-    plot_path = RESULTS_DIR / 'treino_final_sem_pde.png'
+    plot_path = RESULTS_DIR / 'treino_final_likepinn.png'
     plt.savefig(plot_path)
     plt.show()
     print(f"Gráfico salvo em: {plot_path}")
