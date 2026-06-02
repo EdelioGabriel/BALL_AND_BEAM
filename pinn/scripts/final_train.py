@@ -31,9 +31,8 @@ print(f'Usando: {DEVICE}')
 
 OPTUNA_DIR = Path(__file__).parent / 'optuna'
 
-
 study = optuna.load_study(
-    study_name = 'pinn_ball_and_beam',
+    study_name = 'pinn_ball_and_beam_amp_4',
     storage    = f'sqlite:///{OPTUNA_DIR}/pinn_study.db'
 )
 
@@ -49,7 +48,7 @@ BEST_PARAMS = {
     'n_layers':   2,
     'n_hidden':   128,
     'lr':         0.001279411173119678,
-    'w_pde':      0.1,
+    'w_pde':      0.0,
     'w_state':    10.0,
     'w_effort':   0.5,
     'activation': 'SiLU',
@@ -85,19 +84,19 @@ if __name__ == '__main__':
     history = train(
         model,
         optimizer,
-        n_epochs   = 10000,
+        n_epochs   = 5000,
         batch_size = BEST_PARAMS['batch_size'],
         n_steps    = BEST_PARAMS['n_steps'],
         w_state    = BEST_PARAMS['w_state'],
         w_effort   = BEST_PARAMS['w_effort'],
-        w_pde      = BEST_PARAMS['w_pde'],
+        w_pde      = 0.0,
     )
 
     # ================================================================
     # SALVA MODELO
     # ================================================================
 
-    model_path = RESULTS_DIR / 'pinn_best.pth'
+    model_path = RESULTS_DIR / 'pinn_sem_phy.pth'
     torch.save({
         'model_state_dict': model.state_dict(),
         'config': {
@@ -157,7 +156,7 @@ if __name__ == '__main__':
     axes[2].legend()
 
     plt.tight_layout()
-    plot_path = RESULTS_DIR / 'treino_final.png'
+    plot_path = RESULTS_DIR / 'treino_final_sem_pde.png'
     plt.savefig(plot_path)
     plt.show()
     print(f"Gráfico salvo em: {plot_path}")

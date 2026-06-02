@@ -1,14 +1,12 @@
 """
-Este Script contém o código para realizar o treino da Rede Neural Informada por Física (PINN)
+Este Script contém o código para realizar o treino da rede com arquitetura inspirada em PINNs,
 que tem como objetivo aprender uma política de controle para o sistema Ball and Beam
 através de treinamento em simulação.
 
-Treinamento puramente baseado em simulação diferenciável.
+- Nota do autor
 """
 
 import torch
-import numpy as np
-from pathlib import Path
 
 # Definição do local onde o código será executado. Por padrão, gpu
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -30,7 +28,7 @@ def simulate(model, x0, x_dot0, x_ref, n_steps, device=DEVICE):
     Simula o sistema ball and beam com a política da rede.
 
     Args:
-        model:   rede PINN
+        model:   rede likePINN
         x0:      posição inicial        shape (N,)
         x_dot0:  velocidade inicial     shape (N,)
         x_ref:   setpoint               shape (N,)
@@ -84,7 +82,7 @@ def simulate(model, x0, x_dot0, x_ref, n_steps, device=DEVICE):
 
 # ========================== Função de loss ==========================
 
-def loss_function(xs, thetas, x_ref, w_state=1.0, w_effort=0.1, w_pde=0.1):
+def loss_function(xs, thetas, x_ref, w_state=1.0, w_effort=0.1, w_edo=0.1):
     """
     xs:      trajetória simulada    shape (N, n_steps+1)
     thetas:  ações aplicadas        shape (N, n_steps)
@@ -97,16 +95,16 @@ def loss_function(xs, thetas, x_ref, w_state=1.0, w_effort=0.1, w_pde=0.1):
     # Loss de esforço — penaliza ângulos grandes
     loss_effort = torch.mean(thetas ** 2)
 
-    # Resíduo físico — verifica consistência da trajetória com a EDP
+    # Resíduo físico — verifica consistência da trajetória com a EDO
     # ẍ estimado da trajetória simulada
     x_ddot_sim = torch.diff(torch.diff(xs, dim=1), dim=1) / (DT ** 2)
     theta_mid  = thetas[:, :-1]
     residual   = x_ddot_sim - ALPHA * G * theta_mid
-    loss_pde   = torch.mean(residual ** 2)
+    loss_edo   = torch.mean(residual ** 2)
 
-    loss = w_state * loss_state + w_effort * loss_effort + w_pde * loss_pde
+    loss = w_state * loss_state + w_effort * loss_effort + w_edo * loss_edo
 
-    return loss, loss_state, loss_effort, loss_pde
+    return loss, loss_state, loss_effort, loss_edo
 
 # ========================== Amostragem de condições iniciais ========
 
@@ -123,25 +121,25 @@ def sample_initial_conditions(batch_size, device=DEVICE):
 # ========================== Loop de treino ==========================
 
 def train(model, optimizer, n_epochs, batch_size=64, n_steps=40,
-          w_state=1.0, w_effort=0.1, w_pde=0.1):
+          w_state=1.0, w_effort=0.1, w_edo=0.1):
     """
-    Treina a PINN por simulação diferenciável.
+    Treina a lkePINN por simulação diferenciável.
 
     Args:
-        model:      rede PINN
+        model:      rede like   PINN
         optimizer:  otimizador PyTorch
         n_epochs:   número de épocas
         batch_size: condições iniciais por batch
         n_steps:    passos de simulação por episódio (n_steps * DT = duração em segundos)
         w_state:    peso do rastreamento
         w_effort:   peso do esforço de controle
-        w_pde:      peso do resíduo físico
+        w_edo:      peso do resíduo físico
     """
     history = {
         'loss':        [],
         'loss_state':  [],
         'loss_effort': [],
-        'loss_pde':    [],
+        'loss_edo':    [],
     }
 
     for epoch in range(n_epochs):
@@ -154,8 +152,8 @@ def train(model, optimizer, n_epochs, batch_size=64, n_steps=40,
         xs, thetas, _ = simulate(model, x0, x_dot0, x_ref, n_steps)
 
         # Calcula loss
-        loss, loss_state, loss_effort, loss_pde = loss_function(
-            xs, thetas, x_ref, w_state, w_effort, w_pde
+        loss, loss_state, loss_effort, loss_edo = loss_function(
+            xs, thetas, x_ref, w_state, w_effort, w_edo
         )
 
         loss.backward()
@@ -164,12 +162,12 @@ def train(model, optimizer, n_epochs, batch_size=64, n_steps=40,
         history['loss'].append(loss.item())
         history['loss_state'].append(loss_state.item())
         history['loss_effort'].append(loss_effort.item())
-        history['loss_pde'].append(loss_pde.item())
+        history['loss_edo'].append(loss_edo.item())
 
         if epoch % 100 == 0:
             print(f'Epoch {epoch:05d} | Loss: {loss.item():.2e} | '
                   f'state: {loss_state.item():.2e} | '
                   f'Effort: {loss_effort.item():.2e} | '
-                  f'PDE: {loss_pde.item():.2e}')
+                  f'edo: {loss_edo.item():.2e}')
 
     return history

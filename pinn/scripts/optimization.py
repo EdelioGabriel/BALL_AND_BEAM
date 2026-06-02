@@ -1,6 +1,7 @@
 '''
 Este script tem como objetivo realizar a otimização dos hiperparâmetros da rede através do framework do Optuna
-    python optuna_search.py
+
+- Nota do autor
 '''
 
 import sys
@@ -12,7 +13,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from scripts.train import simulate, loss_function, sample_initial_conditions
-from scripts.skeleton import PINN
+from scripts.skeleton import LikePINN
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f'Usando: {DEVICE}')
@@ -24,14 +25,13 @@ print(f'Usando: {DEVICE}')
 def objective(trial):
 
     # ── Hiperparâmetros a otimizar ───────────────────────────────────
-    n_trials   = 100
     n_epochs   = 500
     batch_size = trial.suggest_int('batch_size', 100, 500)
     n_steps    = trial.suggest_int('n_steps',    60, 200)
     n_layers   = trial.suggest_int('n_layers',   2, 5)
     n_hidden   = trial.suggest_categorical('n_hidden', [64, 128, 256, 512])
     lr         = trial.suggest_float('lr',       1e-4, 1e-2, log=True)
-    w_pde      = trial.suggest_float('w_pde',    1, 5.0)
+    w_edo      = trial.suggest_float('w_edo',    1, 5.0)
     w_state    = trial.suggest_float('w_state',  5, 10.0)
     w_effort   = trial.suggest_float('w_effort', 0.1, 0.5)
     activation_name = trial.suggest_categorical('activation', ['Tanh', 'SiLU'])
@@ -42,7 +42,7 @@ def objective(trial):
     }
 
     # ── Modelo e otimizador ──────────────────────────────────────────
-    model = PINN(
+    model = LikePINN(
         n_inputs   = 4,
         n_outputs  = 1,
         n_hidden   = n_hidden,
@@ -63,7 +63,7 @@ def objective(trial):
             xs, thetas, x_ref,
             w_state  = w_state,
             w_effort = w_effort,
-            w_pde    = w_pde,
+            w_edo    = w_edo,
         )
 
         loss.backward()
@@ -95,8 +95,8 @@ if __name__ == '__main__':
         direction      = 'minimize',
         sampler        = sampler,
         pruner         = pruner,
-        study_name     = 'pinn_ball_and_beam_amp_4',
-        storage        = f'sqlite:///{OPTUNA_DIR}/pinn_study.db',
+        study_name     = 'likepinn_ball_and_beam_amp_4',
+        storage        = f'sqlite:///{OPTUNA_DIR}/likepinn_study.db',
         load_if_exists = True
     )
 
