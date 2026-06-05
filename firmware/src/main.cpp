@@ -2,7 +2,7 @@
 #include <Wire.h>
 #include <VL53L0X.h>
 #include <ESP32Servo.h>
-#include "pinn_weights.h"
+#include "likepinn_weights.h"
 
 // ====================================================================
 // PINOS
@@ -25,13 +25,13 @@ volatile float state[2]        = {0.0f, 0.0f};
 volatile float dist_anterior   = 0.0f;
 volatile float integrator      = 0.0f;
 bool           controladorAtivo = false;
-bool           usarPINN         = false;   // false = analítico | true = PINN
+bool           usarPINN         = false;   // false = clássico | true = PINN
 
 const float          Ts            = 0.05f;
 const unsigned long  INTERVALO_US  = 50000UL;
 unsigned long        tempoAnteriorMicros = 0;
 
-// Ganhos do controlador analítico
+// Ganhos do controlador clássico
 const float K[2] = { -2.58360110849265f, -0.80914289088315f };
 const float Ki   =  -0.39478031237442f;
 
@@ -74,32 +74,32 @@ void linear(const float* W, const float* b,
   }
 }
 
-// Inferência completa da PINN
-// Entrada: [posicao_cm, velocidade_cms, x_ref_cm, e_int]
-// Saída:   angulo em graus
+// Inferência completa da LikePINN
 float pinnInference(float pos, float vel, float xref, float eint) {
-  float h0[PINN_N_HIDDEN];
-  float h1[PINN_N_HIDDEN];
-  float out[PINN_N_OUTPUTS];
+  float __attribute__((aligned(4))) hA[LikePINN_N_HIDDEN];
+  float __attribute__((aligned(4))) hB[LikePINN_N_HIDDEN];
+  float __attribute__((aligned(4))) hC[LikePINN_N_HIDDEN];
+  float __attribute__((aligned(4))) out[LikePINN_N_OUTPUTS];
+  float __attribute__((aligned(4))) input[LikePINN_N_INPUTS] = {pos, vel, xref, eint};
 
-  float input[PINN_N_INPUTS] = {pos, vel, xref, eint};
+  // Camada 0
+  linear(net_0_weight, net_0_bias, input, hA, LikePINN_N_INPUTS, LikePINN_N_HIDDEN);
+  silu_vec(hA, LikePINN_N_HIDDEN);
 
-  // Camada 0: Linear + Tanh
-  linear(net_0_weight, net_0_bias, input, h0, PINN_N_INPUTS, PINN_N_HIDDEN);
-  silu_vec(h0, PINN_N_HIDDEN);
+  // Camada 1
+  linear(net_2_weight, net_2_bias, hA, hB, LikePINN_N_HIDDEN, LikePINN_N_HIDDEN);
+  silu_vec(hB, LikePINN_N_HIDDEN);
 
-  // Camada 1: Linear + Tanh
-  linear(net_2_weight, net_2_bias, h0, h1, PINN_N_HIDDEN, PINN_N_HIDDEN);
-  silu_vec(h1, PINN_N_HIDDEN);
+  // Camada 2
+  linear(net_4_weight, net_4_bias, hB, hC, LikePINN_N_HIDDEN, LikePINN_N_HIDDEN);
+  silu_vec(hC, LikePINN_N_HIDDEN);
 
-  // Camada de saída: Linear (sem ativação)
-  linear(net_4_weight, net_4_bias, h1, out, PINN_N_HIDDEN, PINN_N_OUTPUTS);
+  // Camada de saída
+  linear(net_6_weight, net_6_bias, hC, out, LikePINN_N_HIDDEN, LikePINN_N_OUTPUTS);
 
-  // Limita saída ao range físico
   float theta = out[0];
   if (theta >  50.0f) theta =  50.0f;
   if (theta < -50.0f) theta = -50.0f;
-
   return theta;
 }
 
@@ -134,7 +134,7 @@ void setup() {
   servoMotor.write(120);
 
   Serial.println("Sistema Pronto.");
-  Serial.println("[A] Ativar | [D] Desativar | [R] Reset | [P] Alternar PINN/Analitico | [C] Coleta");
+  Serial.println("[A] Ativar | [D] Desativar | [R] Reset | [P] Alternar likePINN/Clássico | [C] Coleta");
 }
 
 // ====================================================================
@@ -193,7 +193,7 @@ void loop() {
         integrator,
         u);
     } else {
-      Serial.print(usarPINN ? "[PINN] " : "[ANAL] ");
+      Serial.print(usarPINN ? "[LikePINN] " : "[CLASSICO] ");
       Serial.print("Ref:");    Serial.print(setpoint);
       Serial.print(" | Pos:"); Serial.print(state[0]);
       Serial.print(" | U:");   Serial.print(u);
@@ -262,7 +262,7 @@ void processarComando() {
       usarPINN = !usarPINN;
       integrator = 0.0f;   // reseta integrador ao trocar controlador
       Serial.print("\n>>> CONTROLADOR: ");
-      Serial.println(usarPINN ? "PINN" : "ANALITICO");
+      Serial.println(usarPINN ? "LikePINN" : "CLÁSSICO");
     }
   } else {
     float val = atof(serialBuffer);
