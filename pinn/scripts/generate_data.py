@@ -74,12 +74,14 @@ buf_ref    = deque(maxlen=JANELA_PLOT)
 buf_u      = deque(maxlen=JANELA_PLOT)
 
 
+DEBUG_SERIAL = True   # mude para False após confirmar que os dados chegam
+
 def is_csv_line(line: str) -> bool:
     parts = line.strip().split(",")
-    if len(parts) != 4:
+    if len(parts) < 4:
         return False
     try:
-        [float(p) for p in parts]
+        [float(p) for p in parts[:4]]   # valida apenas os 4 primeiros campos
         return True
     except ValueError:
         return False
@@ -107,6 +109,9 @@ def thread_leitura(ser, filepath):
 
             if not line:
                 continue
+
+            if DEBUG_SERIAL:
+                print(f"\n  [SERIAL] repr={repr(line)}")
 
             if is_csv_line(line):
                 parts = line.strip().split(",")
@@ -216,7 +221,7 @@ def plot_tempo_real(filepath):
     def update(frame):
         with plot_lock:
             if len(buf_tempo) < 2:
-                return line_pos, line_ref, line_u
+                return
 
             t   = list(buf_tempo)
             pos = list(buf_pos)
@@ -233,12 +238,11 @@ def plot_tempo_real(filepath):
         u_max = max(abs(min(u)), abs(max(u))) + 5
         ax2.set_ylim(-u_max, u_max)
 
-        return line_pos, line_ref, line_u
 
     ani = animation.FuncAnimation(
         fig, update,
         interval         = 200,
-        blit             = True,
+        blit             = False,
         cache_frame_data = False
     )
 
