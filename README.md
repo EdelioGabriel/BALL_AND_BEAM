@@ -206,3 +206,7 @@ Comandos disponíveis via serial durante operação:
 - Lin, J., Zhu, L., Chen, W.-M., Wang, W.-C., Han, S. (2024). *Tiny Machine Learning: Progress and Futures*. [arXiv:2403.19076](https://arxiv.org/abs/2403.19076)
 - Da Silva Neto, E. (2021). *TinyML: Machine learning para microcontroladores*. Embarcados. [https://embarcados.com.br/tinyml-machine-learning-para-microcontroladores/](https://embarcados.com.br/tinyml-machine-learning-para-microcontroladores/)
 - Ogata, K. (2010). *Engenharia de Controle Moderno* (5ª ed.). Pearson.
+
+## Agradecimentos
+
+Agradeço ao meu irmão, Wallace Magalhães, exímio Engenheiro Eletricista que me guiou por essa jornada em sistema de controle, além de me disponibilizar o código para o controle clássico, sem o qual certamente enfrentaria muitos percalços para implementar.
