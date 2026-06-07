@@ -7,9 +7,9 @@
 ![Optuna](https://img.shields.io/badge/Optuna-Hyperparameter%20Search-6C63FF?logo=optuna&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-Implementação de um controlador neural para o sistema **Ball and Beam**, treinado por **simulação diferenciável** e embarcado em um **ESP32-S3** sem bibliotecas de inferência externas.
+Implementação de um controlador neural para o sistema **Ball and Beam**, treinado por **simulação** e embarcado em um **ESP32-S3**.
 
-A rede aprende uma política de controle π(x, ẋ, x_ref, e_int) → θ inteiramente *offline*, sem dados experimentais rotulados. A física do sistema não é uma penalização externa — ela é o próprio simulador que propaga os estados durante o treinamento.
+A rede aprende uma política de controle π(x, ẋ, x_ref, e_int) → θ inteiramente *offline*, sem dados experimentais rotulados. A física do sistema não é uma penalização externa — ela é o próprio simulador que evolui os estados durante o treinamento.
 
 ---
 
@@ -75,7 +75,7 @@ BALL_AND_BEAM/
 │   └── data/                     # CSVs coletados do hardware
 │   └── optuna/
 │       └── policynet_study.db    # Banco de dados do Optuna
-├── docs/
+├── docs/                         # Arquivos do relatório do projeto e vídeos da validação online
 ├── BALL_AND_BEAM.code-workspace
 └── README.md
 ```
@@ -89,9 +89,10 @@ BALL_AND_BEAM/
 | Microcontrolador    | ESP32-S3          |
 | Sensor de distância | VL53L0X (laser)   |
 | Atuador             | Servomotor MG996R |
-| Estrutura           | Impressão 3D — PLA (GrabCAD) |
+| Estrutura           | Impressão 3D — PLA|
 | Bola                | Tênis de mesa     |
 
+O esquema elétrico está contido no relatório em \docs
 ---
 
 ## Instalação
@@ -101,10 +102,10 @@ BALL_AND_BEAM/
 ```bash
 git clone https://github.com/EdelioGabriel/BALL_AND_BEAM.git
 cd BALL_AND_BEAM/pinn
-pip install torch numpy pandas matplotlib optuna pyserial
+pip install -r requirements
 ```
 
-Para o firmware: [PlatformIO](https://platformio.org/) com suporte ao ESP32-S3.
+Para o firmware, indica-se que instale a extensão [PlatformIO](https://platformio.org/) no VSCode, e configure um ambiente de projeto com suporte ao ESP32-S3.
 
 ---
 
@@ -112,12 +113,10 @@ Para o firmware: [PlatformIO](https://platformio.org/) com suporte ao ESP32-S3.
 
 ### 1. Coleta de dados (opcional)
 
-A coleta é opcional — o treino não depende de dados reais. Use para validação ou behavior cloning futuro.
+A coleta é opcional — o treino não depende de dados reais. Use para monitorar os sinais de controle em tempo real e salvar os dados para análise posterior.
 
 ```bash
 python scripts/generate_data.py                          # Linux/Mac (auto-detecta porta)
-python scripts/generate_data.py COM3 115200              # Windows
-python scripts/generate_data.py /dev/ttyUSB0 115200      # Linux/Mac (explícito)
 ```
 
 Comandos disponíveis via terminal durante a coleta:
@@ -127,6 +126,7 @@ Comandos disponíveis via terminal durante a coleta:
 | `A`     | Ativa o controlador       |
 | `D`     | Desativa o controlador    |
 | `R`     | Reset do sistema          |
+| `P`     | Alterna entre LikePINN e controlador clássico |
 | `C`     | Liga/desliga gravação CSV |
 | `15.0`  | Define novo setpoint (cm) |
 | `q`     | Encerra o script          |
@@ -142,6 +142,8 @@ Resultados salvos em `optuna/policynet_study.db`. Para visualizar o dashboard:
 ```bash
 optuna-dashboard sqlite:///optuna/policynet_study.db
 ```
+
+Vale ressaltar que a otimização foi feita utilizando GPU (RTX4090), devido ao tempo de execução. Caso deseje realizar seu próprio estudo, esteja ciente que pode demorar muitos minutos.
 
 ### 3. Treino final
 
@@ -172,89 +174,18 @@ Validação manual vs PyTorch:
 ```bash
 cp export/likepinn_weights.h firmware/include/
 ```
+O código ainda não copia a conversão automaticamente, por isso deve ser manual.
 
 Compile e faça upload com PlatformIO.
 
 ---
 
-## Arquitetura da rede
-
-A `LikePINN` é uma MLP com estrutura configurável, instanciada para o problema de controle como:
-
-| Parâmetro       | Valor                              |
-|-----------------|------------------------------------|
-| Entradas        | 4 — `[x, ẋ, x_ref, e_int]`        |
-| Camadas ocultas | 3 × 256 neurônios                  |
-| Ativação        | SiLU                               |
-| Saída           | 1 — θ (graus), saturado em ±60°   |
-| Parâmetros      | ~198 mil                           |
-
-O vetor de entrada captura o estado completo necessário para uma ação de controle: posição atual, velocidade, referência desejada e erro acumulado (termo integral).
-
----
-
-## Função de perda
-
-$$\mathcal{L} = w_{\text{state}} \cdot \mathcal{L}_{\text{state}} + w_{\text{effort}} \cdot \mathcal{L}_{\text{effort}} + w_{\text{edo}} \cdot \mathcal{L}_{\text{edo}}$$
-
-| Termo | Descrição |
-|-------|-----------|
-| **L_state** | MSE entre trajetória simulada e setpoint em todos os passos |
-| **L_effort** | MSE dos ângulos comandados — penaliza ações excessivas |
-| **L_edo** | Resíduo da EDO — penaliza trajetórias fisicamente inconsistentes |
-
-O resíduo físico é calculado estimando ẍ por diferenças finitas na trajetória simulada e comparando com `(5/9)·g·θ`:
-
-```python
-x_ddot_sim = torch.diff(torch.diff(xs, dim=1), dim=1) / (DT ** 2)
-residual   = x_ddot_sim - ALPHA * G * theta_mid
-loss_edo   = torch.mean(residual ** 2)
-```
-
----
-
-## Simulador diferenciável
-
-A função `simulate()` rola a política da rede por `n_steps` passos usando integração de Euler explícita:
-
-```
-e_int ← e_int + (x_ref − x) · Δt
-θ     ← clamp(π(x, ẋ, x_ref, e_int), −60°, 60°)
-ẍ     ← (5/9) · g · θ
-ẋ     ← ẋ + ẍ · Δt
-x     ← clamp(x + ẋ · Δt, 0, 30 cm)
-```
-
-Como todas as operações são diferenciáveis (PyTorch), o gradiente da loss flui de volta pela trajetória inteira até os pesos da rede.
-
-**Parâmetros físicos do simulador:**
-
-| Parâmetro    | Valor   |
-|--------------|---------|
-| Δt           | 0.05 s  |
-| x ∈           | [0, 30] cm |
-| ẋ_max        | 10 cm/s |
-| θ_max        | 60°     |
-
----
-
-## Hiperparâmetros
-
-Resultado da busca com Optuna:
-
-| Hiperparâmetro | Valor |
-|----------------|-------|
-| Batch size     | 316   |
-| Learning rate  | 10⁻³  |
-| w_state        | 5.11  |
-| w_effort       | 0.35  |
-| Ativação       | SiLU  |
-
+Os demais detalhes sobre a implementação da rede neural estão descritos no relatório na pasta \docs.
 ---
 
 ## Firmware e inferência embarcada
 
-A inferência no ESP32-S3 é implementada manualmente — sem TFLite ou qualquer biblioteca externa. Os pesos são carregados de `likepinn_weights.h` como arrays C e a forward pass é uma sequência de multiplicações matriciais com SiLU aplicada elemento a elemento.
+A inferência no ESP32-S3 é implementada manualmente — sem TFLite ou qualquer biblioteca externa (futura implementação). Os pesos são carregados de `likepinn_weights.h` como arrays C e a forward pass é uma sequência de multiplicações matriciais com SiLU aplicada elemento a elemento.
 
 Comandos disponíveis via serial durante operação:
 
@@ -272,4 +203,6 @@ Comandos disponíveis via serial durante operação:
 ## Referências
 
 - Raissi, M., Perdikaris, P., Karniadakis, G. E. (2017). *Physics Informed Deep Learning*. [arXiv:1711.10561](https://arxiv.org/abs/1711.10561)
-- Baty, H. (2024). *A Practical Introduction to Physics-Informed Neural Networks*. [arXiv:2403.00599](https://arxiv.org/abs/2403.00599)
+- Lin, J., Zhu, L., Chen, W.-M., Wang, W.-C., Han, S. (2024). *Tiny Machine Learning: Progress and Futures*. [arXiv:2403.19076](https://arxiv.org/abs/2403.19076)
+- Da Silva Neto, E. (2021). *TinyML: Machine learning para microcontroladores*. Embarcados. [https://embarcados.com.br/tinyml-machine-learning-para-microcontroladores/](https://embarcados.com.br/tinyml-machine-learning-para-microcontroladores/)
+- Ogata, K. (2010). *Engenharia de Controle Moderno* (5ª ed.). Pearson.
